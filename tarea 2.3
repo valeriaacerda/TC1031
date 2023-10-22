@@ -1,0 +1,269 @@
+// Ordenar un archivo que tenga datos en el siguiente formato
+// mes día hora:minuto:segundo IP:Puerto MensajeError
+
+#include <iostream> // necesairo para la entrada y salida básica del programa
+#include <vector> // necesario para el uso de vectores en c++
+#include <string> // necesario para clase string
+#include <fstream> // necesario para input file stream class
+#include <sstream> // necesario para string stream (leer los renglones del archivo)
+#include <algorithm>
+#include <ctime>
+
+using namespace std;
+
+// establecemos la clase de cada linea de registro
+struct renglRegistro {
+    time_t tiempo;
+    string ip;
+    string mensaje;
+};
+
+// establecemos la clase ipAccess para que cuente la cantidad de accesos
+struct ipAccess {
+    string ip;
+    int count;
+};
+
+time_t str2Unix(const string &tiempoMDH) {
+    // Inicializa en 0 (asegurar de que no use datos malos de memoria)
+    struct tm tiempoTM = {};
+
+    if (strptime(tiempoMDH.c_str(), "%b %d %H:%M:%S", &tiempoTM) == NULL) {
+        cout << endl << "Error convirtiendo: " << tiempoMDH  << " a tiempo unix" << endl;
+        return -1; // Regresa un numero que sabemos que está mal
+    }
+
+    // convertimos variable tipo tm a tiempo Unix (segundos a partir de 1/1/1970)
+    time_t tiempoUnix = mktime(&tiempoTM);
+
+    // regresa error si no se pudo convertir la entrada a tiempo unix
+    if (tiempoUnix == -1) {
+        cout << endl << "Error convirtiendo: " << tiempoMDH << " a tiempo unix" << endl;
+    }
+
+    return tiempoUnix;
+}
+
+vector<renglRegistro> leerTXT(const string& nombreArchivo) {
+    vector<renglRegistro> archTxt; // creamos un vector archTxt de tipo renglRegistro 
+    ifstream file(nombreArchivo); // en input file stream llamamos al archivo
+
+    // Verificamos que el archivo exista y se pueda abrir
+    if (!file.is_open()) {
+        cout << endl << "Error en lectura del archivo" << nombreArchivo << endl;
+        return archTxt;
+    }
+
+    string renglon;
+    while (getline(file, renglon)) {
+        istringstream iss(renglon);
+        string mes, dia, hora, ip, mensaje;
+
+        // Leemos la línea, excepto el mensaje de error ya que se pueden malinterpretar los espacios
+        iss >> mes >> dia >> hora >> ip;
+
+        // Combine the date and time into a single string
+        string tiempoMDH = mes + " " + dia + " " + hora;
+        
+        time_t tiempoUnix = str2Unix(tiempoMDH);
+        
+        getline(iss, mensaje); // Leemos el resto de la línea del registro
+        
+        renglRegistro aux;
+        aux.tiempo = tiempoUnix;
+        aux.ip = ip;
+        aux.mensaje = mensaje;
+        
+        archTxt.push_back(aux); // guardamos el tiempo unix y mensaje en nuestro vector tipo renglRegistro
+    }
+
+    file.close();
+    return archTxt;
+}
+
+// complejidad O(n^2)
+// entrada: vector a ordenar, longitud del vector
+// proceso: comparamos si el valor en posición i es mayor al que está en posición j
+// causando que el valor más pequeño seimpre esté al frente de la lista (algoritmo selection sort)
+// salida: El vector "arreglo" queda ordenado
+// Este arregla el vector de manera ascendiente por fecha
+void ordenaIntercambio(vector<renglRegistro> &arreglo){
+    int vectLen = arreglo.size();
+
+    for (int i = 0; i <= vectLen - 2; i++){
+        for (int j = i + 1; j <= vectLen - 1; j++){
+            if(arreglo[i].tiempo > arreglo[j].tiempo){
+                std::swap(arreglo[i], arreglo[j]);
+            }
+        }
+    }
+}
+
+// complejidad O(log(n))
+// entrada: vector, tamaño del vector, número que está buscando
+// proceso: recorre la lista desde la mitad, revisando si el número buscado es menor, mayor, o el centro
+// si el número es el centro la búsqueda para, si es menor o mayor busca en esa mitad; así sucesivamente
+// salida: índice del número, o -1 si no es encontrado
+int buscaSecuencial(vector<renglRegistro> &arreglo, time_t tiempoBuscado) {
+    int vectLen = arreglo.size();
+
+    if (tiempoBuscado < arreglo[0].tiempo){
+        return 0;
+    } else if (tiempoBuscado > arreglo[vectLen - 1].tiempo){
+        return vectLen;
+    }
+
+    for (int i = 0; i < vectLen; i++){
+        if (arreglo[i].tiempo == tiempoBuscado){
+            return i;
+        }else if (arreglo[i-1].tiempo <= tiempoBuscado && tiempoBuscado <= arreglo[i].tiempo){
+            return i-1;
+        }
+    }
+    return (-1);
+}
+
+// entrada: vector, nombre del archivo, índice inferior y superior 
+// proceso: escribe los datos de una estructura renglRegistro a un archivo txt
+// salida: archivo txt en la carpeta del programa 
+void dump2TXT(vector<renglRegistro> &archivoTXT, string outputTXT, int inferior, int superior){
+    // Abrimos el archivo txt
+    ofstream outputFile(outputTXT);
+
+    // Revisamos si se pudo abrir
+    if (!outputFile.is_open()) {
+        cout << "Error opening output file: " << outputTXT << endl;
+        return; // Teminamos función si no se abrió el programa
+    }
+
+    // Escribimos todo el vector al TXT
+    // renglRegistro.tiempo guarda en formato UNIX time; por lo cual se debe convertir de regreso a legible
+    for (int i = inferior; i <= superior; i++) {
+        time_t auxTime_T = archivoTXT[i].tiempo;
+        struct tm* tm_info = localtime(&auxTime_T); // Allocate memory for tm_info
+        char tiempoChars[20]; // Changed the buffer size to 20
+        strftime(tiempoChars, sizeof(tiempoChars), "%b %d %H:%M:%S", tm_info); // Changed the buffer size to sizeof(tiempoChars)
+
+        outputFile << tiempoChars << " " << archivoTXT[i].ip << " " << archivoTXT[i].mensaje << endl;
+    }
+
+}
+
+// entrada: vector, nombre del archivo, índice inferior y superior 
+// proceso: escribe los datos de una estructura ipAccess a un archivo txt
+// salida: archivo txt en la carpeta del programa 
+void dump2TXT(vector<ipAccess> &archivoTXT, string outputTXT, int inferior, int superior){
+    // Abrimos el archivo txt
+    ofstream outputFile(outputTXT);
+
+    // Revisamos si se puto abrir
+    if (!outputFile.is_open()) {
+        cout << "Error opening output file: " << outputTXT << endl;
+        return; // Teminamos función si no se abrió el programa
+    }
+
+    // Escribimos todo el vector al TXT
+    // renglRegistro.tiempo guarda en formato UNIX time; por lo cual se debe convertir de regreso a legible
+    for (int i = inferior; i <= superior; i++) {
+        outputFile << archivoTXT[i].ip << " " << archivoTXT[i].count << endl;
+    }
+
+}
+
+void ipScrape(vector<renglRegistro> &archivoTXT, vector<ipAccess> &archivoIPs){
+    vector<ipAccess> ipSinPuerto;
+
+    // Fase 1: encontrar las IPs
+    for (int i = 0; i < archivoTXT.size(); i++){
+        string auxString;
+        auxString = archivoTXT[i].ip;
+        int portLocation = -1;
+
+        for (int j = 0; j < auxString.size()-1; j++){
+            if (auxString[j] == ':'){
+                portLocation = j;
+                break;
+            }
+    }
+
+    if (portLocation != -1 && portLocation < auxString.size()) {
+        auxString.erase(portLocation); // Quitamos todo después de portLocation
+    }
+        
+    ipAccess aux;
+    aux.ip = auxString;
+    aux.count = 0;
+
+    ipSinPuerto.push_back(aux);
+    }
+
+    // Fase 2: Contar las IPs
+    for (int i = 0; i < ipSinPuerto.size(); i++){
+        int count = 1;
+        string stringIP = ipSinPuerto[i].ip;
+
+        for (int j = i+1; j < ipSinPuerto.size(); j++){
+            if (stringIP == ipSinPuerto[j].ip){
+                count += 1;
+                ipSinPuerto[j].ip = "0";
+            }
+        }
+
+        if (count > 1){
+            ipAccess aux;
+            aux.ip = stringIP;
+            aux.count = count;
+            archivoIPs.push_back(aux);
+        }
+    }
+}
+
+int main() {
+    // creamos un vector de tipo renglRegistro el cual guarda los datos de bitacora.txt 
+    //vector<renglRegistro> archivoTXT = leerTXT("bitacora.txt");
+
+    vector<renglRegistro> archivoTXT = leerTXT("bitacora.txt");
+
+    // ordenamos el registro
+    //ordenaIntercambio(archivoTXT);
+    //dump2TXT(archivoTXT, "bitacora_ordenada.txt",0,archivoTXT.size());
+    
+    vector <ipAccess> ipContada;
+
+    ipScrape(archivoTXT,ipContada);
+
+    dump2TXT(ipContada,"mayor_accesos.txt",0,ipContada.size());
+
+
+    // Creamos y recibimos los rangos de fecha 
+    string fechaInf, fechaSup;
+    cout << endl << "Introduce la fecha inferior en formato (Mes Dia Hora:Minuto:Segundo): ";
+    getline(cin, fechaInf);
+    // cout << endl << fechaInf << endl;
+    cout << "Introduce la fecha superior en formato (Mes Dia Hora:Minuto:Segundo): ";
+    getline(cin, fechaSup);
+    // cout << endl << fechaSup << endl;
+
+    // Creamos y convertimos los rangos de fecha a UNIX
+    time_t inferiorUnix, superiorUnix;
+    inferiorUnix = str2Unix(fechaInf);
+    superiorUnix = str2Unix(fechaSup);
+
+    // cout << endl << "inferiorUnix: " << inferiorUnix << endl ;
+    // cout << endl << "superiorUnix: " << superiorUnix << endl ;
+
+    // Buscamos en la lista dónde están los índices del rango inferior y superior
+    int indexInferior, indexSuperior;
+    indexInferior = buscaSecuencial(archivoTXT,inferiorUnix);
+    indexSuperior = buscaSecuencial(archivoTXT,superiorUnix);
+
+    // cout << endl << "Inferior " << indexInferior << endl;
+    // cout << endl << "Superior " << indexSuperior << endl;
+
+    // Creamos un txt con el rango especificado
+    dump2TXT(archivoTXT,"bitacora.txt",indexInferior,indexSuperior);
+
+ 
+
+    return 0;
+}
